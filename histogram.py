@@ -13,13 +13,35 @@ context = ts.context(
 context.generate_galois_keys()
 context.global_scale = 2**40
 
-data = rng.normal(scale=(50/3), size=1000)
-data = data - min(data)
-numpy_hist = np.histogram(data, bins=10, density=True)
+data1 = rng.normal(scale=(50/3), size=10000)
+data1 = data1 - min(data1)
+hist1, bin_edges1 = np.histogram(data1)
 
-hist_count = numpy_hist[0]
-hist_range = numpy_hist[1]
-print(np.sum(hist_count))
+rng2 = np.random.default_rng()
+
+data2 = rng2.normal(scale=(50/3), size=10000)
+data2 = data2 - min(data2)
+hist2, bin_edges2 = np.histogram(data2)
+
+def normalise_histogram(hist):
+    new_hist = []
+    for i in range(len(hist)):
+        val = hist[i] / 10000
+        new_hist.append(val)
+    return np.array(new_hist)
+
+def normalise_histogram_prob(hist, bin_edges):
+    new_hist = []
+    for i in range(len(hist)):
+        val = hist[i] / (10000 * (bin_edges[i + 1] - bin_edges[i]))
+        new_hist.append(val)
+    return np.array(new_hist)
+
+
+print(hist1)
+print(hist2)
+
+    
 """
 normalized_hist_count = []
 for i in range(len(hist_count)):
