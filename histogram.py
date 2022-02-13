@@ -37,6 +37,18 @@ def normalise_histogram_prob(hist, bin_edges):
         new_hist.append(val)
     return np.array(new_hist)
 
+def generate_histogram(scale, size):
+    rand = np.random.default_rng()
+    data = rand.normal(scale=scale, size=size)
+    data = data - min(data)
+    return np.histogram(data)
+
+def encrypt_histogram(hist, bin_edges):
+    enc_hist = ts.bfv_vector(context, hist)
+    enc_bin_edges = ts.bfv_vector(context, bin_edges)
+    return (enc_hist, enc_bin_edges)
+
+
 
 print(hist1)
 print(hist2)
