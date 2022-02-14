@@ -6,22 +6,12 @@ import tenseal as ts
 rng = np.random.default_rng()
 
 context = ts.context(
-    ts.SCHEME_TYPE.BFV,
-    poly_modulus_degree=4096,
-    plain_modulus=1032193
+    ts.SCHEME_TYPE.CKKS,
+    poly_modulus_degree=8192,
+    coeff_mod_bit_sizes=[60, 40, 40, 60]
 )
 context.generate_galois_keys()
 context.global_scale = 2**40
-
-data1 = rng.normal(scale=(50/3), size=10000)
-data1 = data1 - min(data1)
-hist1, bin_edges1 = np.histogram(data1)
-
-rng2 = np.random.default_rng()
-
-data2 = rng2.normal(scale=(50/3), size=10000)
-data2 = data2 - min(data2)
-hist2, bin_edges2 = np.histogram(data2)
 
 def normalise_histogram(hist):
     new_hist = []
@@ -30,6 +20,7 @@ def normalise_histogram(hist):
         new_hist.append(val)
     return np.array(new_hist)
 
+
 def normalise_histogram_prob(hist, bin_edges):
     new_hist = []
     for i in range(len(hist)):
@@ -37,21 +28,62 @@ def normalise_histogram_prob(hist, bin_edges):
         new_hist.append(val)
     return np.array(new_hist)
 
-def generate_histogram(scale, size):
+
+def generate_histogram(scale, size, loc=0, bins=10):
     rand = np.random.default_rng()
-    data = rand.normal(scale=scale, size=size)
+    data = rand.normal(loc=loc, scale=(scale/3), size=size)
     data = data - min(data)
-    return np.histogram(data)
+    return np.histogram(data, bins=bins)
 
-def encrypt_histogram(hist, bin_edges):
-    enc_hist = ts.bfv_vector(context, hist)
-    enc_bin_edges = ts.bfv_vector(context, bin_edges)
-    return (enc_hist, enc_bin_edges)
+"""
+def encrypt_histogram(hist, bins):
+    enc_hist = ts.ckks_vector(context, hist)
+    enc_bins = ts.ckks_vector(context, bins)
+    return (enc_hist, enc_bins)
+"""
+
+"""
+def decrypt_histogram(enc_hist, enc_bins):
+    hist = enc_hist.decrypt()
+    bins = enc_bins.decrypt()
+    return (hist, bins)
+"""
+
+def merge_histograms(enc_hist1, enc_hist2):
+    add = enc_hist1 + enc_hist2
+    return add * 0.5
+    
+
+def compare_histograms(enc_hist1, enc_hist2):
+    diff = enc_hist1 - enc_hist2
+    return diff
 
 
+def sum_diffs(diff):
+    
+
+
+bin_edges = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120]
+
+hist1, _ = generate_histogram(50, 10000, bins=bin_edges)
+norm_hist1 = normalise_histogram(hist1)
+
+hist2, _ = generate_histogram(50, 10000, bins=bin_edges)
+norm_hist2 = normalise_histogram(hist2)
 
 print(hist1)
 print(hist2)
+print(norm_hist1)
+print(norm_hist2)
+
+enc_hist1 = ts.ckks_vector(context, norm_hist1)
+enc_hist2 = ts.ckks_vector(context, norm_hist2)
+#enc_merged_hist = merge_histograms(enc_hist1, enc_hist2)
+#merged_hist = enc_merged_hist.decrypt()
+enc_diff_hist = compare_histograms(enc_hist1, enc_hist2)
+diff_hist = enc_diff_hist.decrypt()
+print(diff_hist)
+
 
     
 """
