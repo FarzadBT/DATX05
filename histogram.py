@@ -59,8 +59,12 @@ def compare_histograms(enc_hist1, enc_hist2):
     return diff
 
 
-def sum_diffs(diff):
-    
+def sum_diffs(bin_diffs):
+    diff_sum = 0
+    for diff in bin_diffs:
+        diff_sum += diff
+
+    return (diff_sum <= 0.0001)
 
 
 bin_edges = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120]
