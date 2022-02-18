@@ -3,11 +3,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import tenseal as ts
 import queue
+import sys
 
 from vendor import Vendor
 from coordinator import Coordinator
-
-rng = np.random.default_rng()
 
 context = ts.context(
     ts.SCHEME_TYPE.CKKS,
@@ -18,11 +17,12 @@ context.generate_galois_keys()
 context.global_scale = 2**40
 
 
-bin_edges = [x for x in range(121)]
+bin_edges = [x for x in range(121)] # [0,1,2,...,118,119,120]
 
-histQ = queue.Queue(100)
-mergedQ = queue.Queue()
-lossQ = queue.Queue()
+
+histQ = queue.Queue(100) # Queue for encrypted histograms going from vendors to coordinator
+mergedQ = queue.Queue() # Queue for encrypted merged histograms going from coordinator to vendors
+lossQ = queue.Queue() # Queue for (unencrypted) loss-values going from vendors to coordinator
 
 vendor1 = Vendor(1, "Vendor-1", context, bin_edges, histQ, mergedQ, lossQ)
 vendor2 = Vendor(2, "Vendor-2", context, bin_edges, histQ, mergedQ, lossQ)
