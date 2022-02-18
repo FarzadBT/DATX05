@@ -1,9 +1,6 @@
 from re import M
-import numpy as np
-import matplotlib.pyplot as plt
 import tenseal as ts
 import queue
-import sys
 
 from vendor import Vendor
 from coordinator import Coordinator
