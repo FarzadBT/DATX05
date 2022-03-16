@@ -22,7 +22,7 @@ class Coordinator (threading.Thread):
 
 
     def average_weights(self, vendor_weights):
-        w_avg = vendor_weights[0]
+        w_avg = copy.deepcopy(vendor_weights[0])
 
         for key in w_avg.keys():
             for i in range(1, len(vendor_weights)):
@@ -30,6 +30,7 @@ class Coordinator (threading.Thread):
             w_avg[key] = w_avg[key] * (1/len(vendor_weights))
 
         return w_avg
+
 
     def test(self):
         #This function test the global model on test data and returns test loss and test accuracy
@@ -77,7 +78,7 @@ class Coordinator (threading.Thread):
             new_enc_weights = self.average_weights(vendor_weights)
             
             for queue in self.send_queues:
-                queue.put(new_enc_weights)
+                queue.put(copy.deepcopy(new_enc_weights))
 
             print(f'average train loss {avg_loss:.3g}')
 
