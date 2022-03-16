@@ -47,7 +47,7 @@ def encode_species(species):
     if species == 'virginica':
         return 2
     else:
-        raise ValueError('Species \'{}\' is not recognized.'.format(species))
+        raise ValueError(f'Species \'{species}\' is not recognized.')
 
 dataset = pd.read_csv("Algorithm/iris.csv")
 
