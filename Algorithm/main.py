@@ -27,8 +27,8 @@ context.global_scale = pow(2, bits_scale)
 context.generate_galois_keys()
 
 # Parameters
-num_clients = 1
-num_selected = 1
+num_clients = 3
+num_selected = 2
 num_rounds = 150
 epochs = 10
 
@@ -65,9 +65,9 @@ test_loader = DataLoader(test_dataset, batch_size=32)
 send_to_vendor_queues = [queue.Queue() for i in range(num_clients)]
 send_to_coordinator_queue = queue.Queue()
 
-coordinator = Coordinator(0, "Coordinator", num_clients, num_selected, num_rounds, send_to_vendor_queues, send_to_coordinator_queue, test_loader)
+coordinator = Coordinator(0, "Coordinator", num_clients, num_selected, num_rounds, send_to_vendor_queues, send_to_coordinator_queue)
 
-vendors = [Vendor(i+1, f"Vendor-{i+1}", send_to_vendor_queues[i], send_to_coordinator_queue, train_data_loaders[i], epochs, context) for i in range(num_clients)]
+vendors = [Vendor(i+1, f"Vendor-{i+1}", send_to_vendor_queues[i], send_to_coordinator_queue, train_data_loaders[i], epochs, context, test_loader) for i in range(num_clients)]
 
 # Start processes
 for vendor in vendors: vendor.start()

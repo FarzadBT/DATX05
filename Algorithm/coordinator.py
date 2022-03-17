@@ -2,12 +2,11 @@ import threading
 import numpy as np
 import torch
 import copy
-import torch.nn.functional as F
 
 from simpleModel import SimpleModel
 
 class Coordinator (threading.Thread):
-    def __init__(self, threadID, name, num_clients, num_selected, num_rounds, send_queues, receive_queue, test_loader):
+    def __init__(self, threadID, name, num_clients, num_selected, num_rounds, send_queues, receive_queue):
         threading.Thread.__init__(self)
         self.threadID = threadID
         self.name = name
@@ -17,10 +16,9 @@ class Coordinator (threading.Thread):
         self.send_queues = send_queues
         self.receive_queue = receive_queue
 
-        self.test_loader = test_loader  
 
 
-
+    # Given a list of (encrypted) weight dictionaries, averages the weights and returns the average
     def average_weights(self, vendor_weights):
         w_avg = copy.deepcopy(vendor_weights[0])
 
@@ -30,25 +28,6 @@ class Coordinator (threading.Thread):
             w_avg[key] = w_avg[key] * (1/len(vendor_weights))
 
         return w_avg
-
-
-    def test(self):
-        #This function test the global model on test data and returns test loss and test accuracy
-        self.model.eval()
-        test_loss = 0
-        correct = 0
-        with torch.no_grad():
-            for data, target in self.test_loader:
-                data, target = data.cuda(), target.cuda()
-                output = self.model(data)
-                test_loss += F.nll_loss(output, target, reduction='sum').item()  # sum up batch loss
-                pred = output.argmax(dim=1, keepdim=True)  # get the index of the max log-probability
-                correct += pred.eq(target.view_as(pred)).sum().item()
-
-        test_loss /= len(self.test_loader.dataset)
-        acc = correct / len(self.test_loader.dataset)
-
-        return test_loss, acc
 
 
 
@@ -62,25 +41,31 @@ class Coordinator (threading.Thread):
 
             loss = 0
             vendor_weights = []
-            for client in selected_clients:
-                self.send_queues[client].put(None)
+            # Sends signal to client to perform training
+            for client in selected_clients: self.send_queues[client].put((1, None))
 
+            # Retrieve the encrypted client models and training losses
             for client in selected_clients:
                 (temp_loss, enc_weight) = self.receive_queue.get()
                 loss += temp_loss
                 vendor_weights.append(enc_weight)
-            
-            avg_loss = np.abs(loss / self.num_selected)
+
+            avg_loss = loss / self.num_selected
             if (avg_loss < 0.01) :
                 print(f"We're done with avg loss {avg_loss}")
                 break
             
+            # Aggregate and compute the weighted average model
             new_enc_weights = self.average_weights(vendor_weights)
             
-            for queue in self.send_queues:
-                queue.put(copy.deepcopy(new_enc_weights))
+            # Send the aggregated model back to the clients
+            for queue in self.send_queues: queue.put((2, copy.deepcopy(new_enc_weights)))
+            
+            # Retrieve test results of a vendor model and print stats
+            self.send_queues[0].put((3, None))
+            (test_loss, acc) = self.receive_queue.get()
+            print(f'average train loss {avg_loss:.3g} | test loss  {test_loss:.3g} | test acc: {acc:.3f}')
 
-            print(f'average train loss {avg_loss:.3g}')
-
+        for queue in self.send_queues: queue.put((4, None))
         print(f"Exiting {self.name}")
     
