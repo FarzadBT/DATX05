@@ -1,80 +1,88 @@
+import copy
 import threading
-import numpy as np
+import torch
 import tenseal as ts
+from torch import nn
+import torch.nn.functional as F
+
+from simpleModel import SimpleModel
 
 class Vendor (threading.Thread):
-    """
-    Vendors generate an encrypted histogram of data which is sent to the coordinator.
-    Vendors receive back an encrypted merged histogram and can decrypt it to calculate loss.
-    """
+    
 
-    nVals = 10000 # Amount of values to generate
-    rand = np.random.default_rng() 
-
-    def __init__(self, threadID, name, context, bins, histQ, mergedQ, lossQ):
+    def __init__(self, threadID, name, receiveQueue, sendQueue, dataloader, epochs, context, test_loader):
         threading.Thread.__init__(self)
         self.threadID = threadID
         self.name = name
+        self.receiveQueue = receiveQueue
+        self.sendQueue = sendQueue
+        self.dataloader = dataloader
+        self.epochs = epochs
         self.context = context
-        self.bins = bins
-        self.histQ = histQ
-        self.mergedQ = mergedQ
-        self.lossQ = lossQ
-    
-    # Sums the differances through absolute value
-    def sum_diffs(self, hist_diffs):
-        diff_sum = 0
-        for diff in hist_diffs:
-            diff_sum += abs(diff)
-        return diff_sum
-    
-    # Outputs a value through normal distribution, re-generates the value if it's negative or out of scale
-    def singleNormal(self, loc, scale):
-        val = int(self.rand.normal(loc=loc, scale=scale/3))
-        if val < 0 or val > loc+scale:
-            return self.singleNormal(loc, scale)
-        else:
-            return val
+        self.test_loader = test_loader
+        
+        self.model = SimpleModel()
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.01)
+        self.loss_fn = nn.CrossEntropyLoss()
     
 
-    # Normalise the histogram to the number of values in the histogram
-    def normalise_histogram(self, hist, nVals):
-        new_hist = []
-        for i in range(len(hist)):
-            val = hist[i] / nVals
-            new_hist.append(val)
-        return np.array(new_hist)
-
-    def accumulate(self, context):
-        vals = []
-        merged_hist = None
-        loc = np.random.randint(30, 91)
-        scale = np.random.randint(10, 31)
-
-        while True:
-            # Generates nVals values, build a histogram, encrypt it, and send it to coordinator
-            for i in range(self.nVals):
-                vals.append(self.singleNormal(loc, scale))
-
-            hist, _ = np.histogram(vals, bins=self.bins)
-            norm_hist = self.normalise_histogram(hist, self.nVals)
-            enc_norm_hist = ts.ckks_vector(context, norm_hist)
-            self.histQ.put(enc_norm_hist)
-            vals = []
-
-            # Get merged histogram from coordinator, decrypt, compute loss, and send it back to coordinator
-            enc_merged_hist = self.mergedQ.get()
-            new_merged_hist = enc_merged_hist.decrypt()
-            if merged_hist == None:
-                merged_hist = new_merged_hist
-                self.lossQ.put(1.0)
-            else:
-                hist_diffs = [x - y for x, y in zip(merged_hist, new_merged_hist)]
-                sum_diff = self.sum_diffs(hist_diffs)
-                self.lossQ.put(sum_diff)
-                merged_hist = new_merged_hist
     
+    # Model training
+    def update_vendor(self):
+        print(f"Training {self.name}")
+        self.model.train()
+        for _ in range(self.epochs):
+            for data, target in self.dataloader:
+                self.optimizer.zero_grad()
+                output = self.model(data)
+                loss = self.loss_fn(output, target)
+                loss.backward()
+                self.optimizer.step()
+
+        model_dict = copy.deepcopy(self.model.state_dict())
+        for key in model_dict:
+            model_dict[key] = ts.ckks_tensor(self.context, model_dict[key])
+
+        return (loss.item(), model_dict)
+
+    #This function test the global model on test data and returns test loss and test accuracy
+    def test(self):
+        self.model.eval()
+        test_loss = 0
+        correct = 0
+        with torch.no_grad():
+            for data, target in self.test_loader:
+                output = self.model(data)
+                test_loss += F.cross_entropy(output, target, reduction='sum').item()  # sum up batch loss
+                pred = output.argmax(dim=1, keepdim=True)  # get the index of the max log-probability
+                correct += pred.eq(target.view_as(pred)).sum().item()
+
+        test_loss /= len(self.test_loader.dataset)
+        acc = correct / len(self.test_loader.dataset)
+
+        return test_loss, acc
+
+
+
+    # Main loop
     def run(self):
         print(f"Starting {self.name}")
-        self.accumulate(self.context)
+        while(True):
+            (flag, temp) = self.receiveQueue.get()
+            if flag == 1: # if update requested
+                train_loss, enc_model_dict = self.update_vendor()
+                self.sendQueue.put((train_loss, enc_model_dict))
+            elif flag == 2: # if get state_dict
+                for key in temp:
+                    temp[key] = torch.Tensor(temp[key].decrypt().tolist())
+                self.model.load_state_dict(temp)
+            elif flag == 3: # if test requested
+                tuple = self.test()
+                self.sendQueue.put(tuple)
+            elif flag == 4: # if shutdown requested
+                break
+            else: # if not a valid flag
+                raise Exception("Vendor not given valid flag")
+
+
         print(f"Exiting {self.name}")

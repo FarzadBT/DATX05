@@ -153,3 +153,5 @@ cython_debug/
 
 *MNIST
 *cifar-10-batches-py
+*cl1_linear_regression.ipynb
+*cl1_logistic_regression.ipynb
