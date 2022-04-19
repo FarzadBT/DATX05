@@ -151,7 +151,12 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
+# Datasets
 *MNIST
 *cifar-10-batches-py
 *cl1_linear_regression.ipynb
 *cl1_logistic_regression.ipynb
+*iris.csv
+
+# Misc folders
+Socket_Test/
