@@ -9,15 +9,13 @@ import tenseal as ts
 from simpleModel import SimpleModel
 
 class Coordinator (threading.Thread):
-    def __init__(self, threadID, name, num_clients, num_selected, num_rounds, send_queues, receive_queue, port, client_ports, ts_context):
+    def __init__(self, threadID, name, num_clients, num_selected, num_rounds, port, client_ports, ts_context):
         threading.Thread.__init__(self)
         self.threadID = threadID
         self.name = name
         self.num_clients = num_clients
         self.num_selected = num_selected
         self.num_rounds = num_rounds
-        self.send_queues = send_queues
-        self.receive_queue = receive_queue
         self.port = port
         self.client_ports = client_ports
         self.ts_context = ts_context
@@ -53,7 +51,6 @@ class Coordinator (threading.Thread):
         zmq_context = zmq.Context()
         for client_port in self.client_ports:
             client_socket = zmq_context.socket(zmq.REQ)
-            #client_socket.bind(f"tcp://localhost:{client_port}")
             client_sockets.append(client_socket)
             client_socket.connect(f"tcp://localhost:{client_port}")
 
@@ -64,7 +61,7 @@ class Coordinator (threading.Thread):
 
             # Request encrypted weights
             for client in selected_clients:
-                client_sockets[client].send_string("0")
+                client_sockets[client].send_pyobj((0, None))
 
             loss = 0
             vendor_weights = []
@@ -78,65 +75,19 @@ class Coordinator (threading.Thread):
             if (avg_loss < 0.01):
                 print(f"We're done with avg loss {avg_loss}")
                 break
-
+            
+            # Average and distribute weights
             new_enc_weights = self.socketed_average_weights(vendor_weights)
+            for client in client_sockets:
+                client.send_pyobj((1, new_enc_weights))
+            for client in client_sockets:
+                client.recv_string()
 
-            # Distribute weighted average weights
-            for client in selected_clients:
-                client_sockets[client].send_pyobj(new_enc_weights)
-
-            test_losses = []
-            test_accuracies = []
             # Receive test accuracy
-            for client in selected_clients:
-               test_loss, test_accuracy = client_sockets[client].recv_pyobj()
-               test_losses.append(test_loss)
-               test_accuracies.append(test_accuracy)
-            
-            avg_test_loss = sum(test_losses) / len(selected_clients)
-            avg_acc = sum(test_accuracies) / len(selected_clients)
+            client_sockets[0].send_pyobj((2, None))
+            test_loss, test_accuracy = client_sockets[0].recv_pyobj()
 
-            print(f'average train loss {avg_loss:.3g} | test loss  {avg_test_loss:.3g} | test acc: {avg_acc:.3f}')
+            print(f'average train loss {avg_loss:.3g} | test loss  {test_loss:.3g} | test acc: {test_accuracy:.3f}')
         
-        for client_socket in client_sockets: client_socket.send_string("1")
+        for client_socket in client_sockets: client_socket.send_pyobj((3, None))
         print(f"Exiting {self.name}")
-         
-
-    def normal_run(self):
-        print(f"Starting {self.name}")
-
-        for r in range(self.num_rounds):
-            print(f"Round {r+1}")
-
-            selected_clients = np.random.permutation(self.num_clients)[:self.num_selected]
-
-            loss = 0
-            vendor_weights = []
-            # Sends signal to client to perform training
-            for client in selected_clients: self.send_queues[client].put((1, None))
-
-            # Retrieve the encrypted client models and training losses
-            for client in selected_clients:
-                (temp_loss, enc_weight) = self.receive_queue.get()
-                loss += temp_loss
-                vendor_weights.append(enc_weight)
-
-            avg_loss = loss / self.num_selected
-            if (avg_loss < 0.01):
-                print(f"We're done with avg loss {avg_loss}")
-                break
-            
-            # Aggregate and compute the weighted average model
-            new_enc_weights = self.average_weights(vendor_weights)
-            
-            # Send the aggregated model back to the clients
-            for queue in self.send_queues: queue.put((2, copy.deepcopy(new_enc_weights)))
-            
-            # Retrieve test results of a vendor model and print stats
-            self.send_queues[0].put((3, None))
-            (test_loss, acc) = self.receive_queue.get()
-            print(f'average train loss {avg_loss:.3g} | test loss  {test_loss:.3g} | test acc: {acc:.3f}')
-
-        for queue in self.send_queues: queue.put((4, None))
-        print(f"Exiting {self.name}")
-    

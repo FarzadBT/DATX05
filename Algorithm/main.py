@@ -43,7 +43,7 @@ def encode_species(species):
     else:
         raise ValueError('Species \'{}\' is not recognized.'.format(species))
 
-dataset = pd.read_csv("Algorithm/iris.csv")
+dataset = pd.read_csv("iris.csv")
 
 x = dataset[['sepal_length', 'sepal_width', 'petal_length', 'petal_width']].values
 y = np.array(list(map(encode_species, dataset['species'].values)))

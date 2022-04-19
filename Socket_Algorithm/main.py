@@ -68,16 +68,12 @@ torch_y = torch.tensor(y_test, dtype=torch.int64)
 test_dataset = TensorDataset(torch_x, torch_y)
 test_loader = DataLoader(test_dataset, batch_size=32)
 
-# Create processes and queues
-send_to_vendor_queues = [queue.Queue() for i in range(num_clients)]
-send_to_coordinator_queue = queue.Queue()
-
-# Create client port numbers
+# Prepare and create processes
 client_ports = [(port + i) for i in range(num_clients)]
 
-coordinator = Coordinator(0, "Coordinator", num_clients, num_selected, num_rounds, send_to_vendor_queues, send_to_coordinator_queue, port, client_ports, pub_context)
+coordinator = Coordinator(0, "Coordinator", num_clients, num_selected, num_rounds, port, client_ports, pub_context)
 
-vendors = [Vendor(i+1, f"Vendor-{i+1}", send_to_vendor_queues[i], send_to_coordinator_queue, train_data_loaders[i], epochs, context, test_loader, client_ports[i]) for i in range(num_clients)]
+vendors = [Vendor(i+1, f"Vendor-{i+1}", train_data_loaders[i], epochs, context, test_loader, client_ports[i]) for i in range(num_clients)]
 
 # Start processes
 for vendor in vendors: vendor.start()
