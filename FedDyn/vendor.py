@@ -26,8 +26,8 @@ class Vendor (threading.Thread):
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.01)
         self.loss_fn = nn.CrossEntropyLoss()
 
-        self.local_gradient = 0
-        self.prev_model
+        self.local_gradient = self.model.state_dict()
+        self.prev_model = SimpleModel()
 
 
     def update_vendor(self):
@@ -38,31 +38,40 @@ class Vendor (threading.Thread):
                 self.optimizer.zero_grad()
                 output = self.model(data)
                 loss = self.loss_fn(output, target)
-
+                loss = self.dynamic_regularization(loss)
                 loss.backward()
                 self.optimizer.step()
 
         model_dict = copy.deepcopy(self.model.state_dict())
+        self.update_local_gradient()
 
         return (loss.item(), model_dict)
 
 
     def dynamic_regularization(self, loss):
-            first_penalty_term = 0
+        first_penalty_term = 0
 
-            model_dict = copy.deepcopy(self.model.state_dict())
-            for key in model_dict:
-                first_penalty_term += model_dict[key] * self.local_gradient
+        model_dict = copy.deepcopy(self.model.state_dict())
+        for key in model_dict:
+            first_penalty_term += torch.sum(model_dict[key] * self.local_gradient[key])
 
-            loss -= first_penalty_term
+        loss -= first_penalty_term
 
-            second_penalty_term = 0
-            prev_model_dict = self.prev_model.state_dict()
-            for key in model_dict:
-                second_penalty_term += (self.alpha / 2) * ((model_dict[key] - prev_model_dict[key]) ** 2)
+        second_penalty_term = 0
+        prev_model_dict = self.prev_model.state_dict()
+        for key in model_dict:
+            second_penalty_term += torch.sum((self.alpha / 2) * ((model_dict[key] - prev_model_dict[key]) ** 2))
 
-            loss += second_penalty_term
+        loss += second_penalty_term
 
+        return loss
+
+
+    def update_local_gradient(self):
+        prev_state_dict = self.prev_model.state_dict()
+        curr_state_dict = self.model.state_dict()
+        for key in self.local_gradient.keys():
+            self.local_gradient[key] -= self.alpha * (curr_state_dict[key] - prev_state_dict[key])
 
 
     #This function test the global model on test data and returns test loss and test accuracy

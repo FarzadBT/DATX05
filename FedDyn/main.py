@@ -38,8 +38,9 @@ port = 10000
 # Parameters
 num_clients = 3
 num_selected = 2
-num_rounds = 150
+num_rounds = 1000
 epochs = 10
+alpha = 0.01
 
 # Preprocessing
 def encode_species(species):
@@ -73,9 +74,9 @@ test_loader = DataLoader(test_dataset, batch_size=32)
 # Prepare and create processes
 client_ports = [(port + i) for i in range(num_clients)]
 
-coordinator = Coordinator(0, "Coordinator", num_clients, num_selected, num_rounds, port, client_ports)
+coordinator = Coordinator(0, "Coordinator", num_clients, num_selected, num_rounds, port, client_ports, alpha)
 
-vendors = [Vendor(i+1, f"Vendor-{i+1}", train_data_loaders[i], epochs, test_loader, client_ports[i]) for i in range(num_clients)]
+vendors = [Vendor(i+1, f"Vendor-{i+1}", train_data_loaders[i], epochs, test_loader, client_ports[i], alpha) for i in range(num_clients)]
 
 # Start processes
 for vendor in vendors: vendor.start()
