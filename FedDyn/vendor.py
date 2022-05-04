@@ -27,8 +27,9 @@ class Vendor (threading.Thread):
         self.loss_fn = nn.CrossEntropyLoss()
 
         self.local_gradient = self.model.state_dict()
+        for key in self.local_gradient:
+            self.local_gradient[key] = torch.zeros(self.local_gradient[key].shape)
         self.prev_model = SimpleModel()
-
 
     def update_vendor(self):
         print(f"Training {self.name}")
@@ -49,7 +50,7 @@ class Vendor (threading.Thread):
 
 
     def dynamic_regularization(self, loss):
-        first_penalty_term = 0
+        first_penalty_term = 0.0
 
         model_dict = copy.deepcopy(self.model.state_dict())
         for key in model_dict:
@@ -57,10 +58,10 @@ class Vendor (threading.Thread):
 
         loss -= first_penalty_term
 
-        second_penalty_term = 0
+        second_penalty_term = 0.0
         prev_model_dict = self.prev_model.state_dict()
         for key in model_dict:
-            second_penalty_term += torch.sum((self.alpha / 2) * ((model_dict[key] - prev_model_dict[key]) ** 2))
+            second_penalty_term += torch.sum((self.alpha / 2.0) * ((model_dict[key] - prev_model_dict[key]) ** 2.0))
 
         loss += second_penalty_term
 
@@ -95,7 +96,6 @@ class Vendor (threading.Thread):
     def run(self):
         print(f"Starting {self.name}")
         zmq_context = zmq.Context()
-
         coord_socket = zmq_context.socket(zmq.REP)
         coord_socket.bind(f"tcp://*:{self.port}")
 
@@ -106,6 +106,7 @@ class Vendor (threading.Thread):
                 train_loss, weights = self.update_vendor()
                 coord_socket.send_pyobj((train_loss, weights))
             if flag == 1: # Receive (averaged) weights and update model
+                self.prev_model = copy.deepcopy(self.model)
                 self.model.load_state_dict(data)
                 coord_socket.send_string("Updated")
             if flag == 2: # return test data
