@@ -23,36 +23,34 @@ class Coordinator (threading.Thread):
         self.h = SimpleModel().state_dict()
         for key in self.h:
             self.h[key] = torch.zeros(self.h[key].shape)
-        self.model = SimpleModel()
+        self.global_model = SimpleModel()
 
     
     def compute_new_h(self, vendor_weights):
         client_sum = copy.deepcopy(vendor_weights[0])
-        prev_state_dict = self.model.state_dict()
+        prev_state_dict = self.global_model.state_dict()
         for key in client_sum.keys():
             for i in range(1, len(vendor_weights)):
-                client_sum[key] += vendor_weights[i][key]
+                client_sum[key] += (vendor_weights[i][key] - prev_state_dict[key])
             
-        delta_sum = {}
-        for key in client_sum.keys():
-            delta_sum[key] = client_sum[key] - prev_state_dict[key]
+        #delta_sum = {}
+        #for key in client_sum.keys():
+            #delta_sum[key] = client_sum[key] - prev_state_dict[key]
 
-        new_h = {}
         for key in self.h.keys():
-            new_h[key] = self.h[key] - (self.alpha * (1.0 /self.num_clients)) * delta_sum[key]
-        self.h = new_h
+            self.h[key] -= (self.alpha / self.num_clients) * client_sum[key]
 
 
     def update_coord_model(self, vendor_weights):
         client_sum = copy.deepcopy(vendor_weights[0])
-        coord_dict = self.model.state_dict()
+        coord_dict = self.global_model.state_dict()
         for key in client_sum.keys():
             for i in range(1, len(vendor_weights)):
                 client_sum[key] += vendor_weights[i][key]
 
         for key in coord_dict.keys():
             coord_dict[key] = ((1.0 / self.num_selected) * client_sum[key]) - ((1.0 / self.alpha) * self.h[key])
-        self.model.load_state_dict(coord_dict)
+        self.gloabl_model.load_state_dict(coord_dict)
 
         return coord_dict
 
@@ -72,7 +70,7 @@ class Coordinator (threading.Thread):
 
             # Request encrypted weights
             for client in selected_clients:
-                client_sockets[client].send_pyobj((0, None))
+                client_sockets[client].send_pyobj((0, self.global_model.state_dict()))
 
             loss = 0
             vendor_weights = []
@@ -84,12 +82,12 @@ class Coordinator (threading.Thread):
         
             
             # Average and distribute weights
-            self.compute_new_h(vendor_weights)
-            new_weights = self.update_coord_model(vendor_weights)
-            for client in selected_clients:
-                client_sockets[client].send_pyobj((1, new_weights))
-            for client in selected_clients:
-                client_sockets[client].recv_string()
+            # self.compute_new_h(vendor_weights)
+            # new_weights = self.update_coord_model(vendor_weights)
+            # for client in selected_clients:
+            #     client_sockets[client].send_pyobj((1, new_weights))
+            # for client in selected_clients:
+            #     client_sockets[client].recv_string()
 
             # Receive test accuracy
             client_sockets[selected_clients[0]].send_pyobj((2, None))

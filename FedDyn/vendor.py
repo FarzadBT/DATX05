@@ -29,7 +29,7 @@ class Vendor (threading.Thread):
         self.local_gradient = self.model.state_dict()
         for key in self.local_gradient:
             self.local_gradient[key] = torch.zeros(self.local_gradient[key].shape)
-        self.prev_model = SimpleModel()
+        self.prev_global_model = SimpleModel()
 
     def update_vendor(self):
         print(f"Training {self.name}")
@@ -44,7 +44,7 @@ class Vendor (threading.Thread):
                 self.optimizer.step()
 
         model_dict = copy.deepcopy(self.model.state_dict())
-        self.update_local_gradient()
+        # self.update_local_gradient()
 
         return (loss.item(), model_dict)
 
@@ -54,25 +54,25 @@ class Vendor (threading.Thread):
 
         model_dict = copy.deepcopy(self.model.state_dict())
         for key in model_dict:
-            first_penalty_term += torch.sum(model_dict[key] * self.local_gradient[key])
+            first_penalty_term += torch.sum(self.local_gradient[key] * model_dict[key])
 
         loss -= first_penalty_term
 
         second_penalty_term = 0.0
-        prev_model_dict = self.prev_model.state_dict()
+        prev_global_model_dict = self.prev_global_model.state_dict()
         for key in model_dict:
-            second_penalty_term += torch.sum((self.alpha / 2.0) * ((model_dict[key] - prev_model_dict[key]) ** 2.0))
+            second_penalty_term += torch.sum(((model_dict[key] - prev_global_model_dict[key])))
 
-        loss += second_penalty_term
+        loss += (second_penalty_term ** 2.0) * (self.alpha / 2.0)
 
         return loss
 
 
     def update_local_gradient(self):
-        prev_state_dict = self.prev_model.state_dict()
+        prev_global_state_dict = self.prev_global_model.state_dict()
         curr_state_dict = self.model.state_dict()
         for key in self.local_gradient.keys():
-            self.local_gradient[key] -= self.alpha * (curr_state_dict[key] - prev_state_dict[key])
+            self.local_gradient[key] -= self.alpha * (curr_state_dict[key] - prev_global_state_dict[key])
 
 
     #This function test the global model on test data and returns test loss and test accuracy
@@ -103,9 +103,10 @@ class Vendor (threading.Thread):
             # Will be blocked by recv() until called for
             flag, data = coord_socket.recv_pyobj()
             if flag == 0: # Train and return weights
+                self.prev_global_model.load_state_dict(data)
                 train_loss, weights = self.update_vendor()
                 coord_socket.send_pyobj((train_loss, weights))
-            if flag == 1: # Receive (averaged) weights and update model
+            if flag == 1: # Receive (averaged) weights and update model (Not used)
                 self.prev_model = copy.deepcopy(self.model)
                 self.model.load_state_dict(data)
                 coord_socket.send_string("Updated")
