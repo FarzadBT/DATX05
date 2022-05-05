@@ -50,9 +50,7 @@ class Coordinator (threading.Thread):
 
         for key in coord_dict.keys():
             coord_dict[key] = ((1.0 / self.num_selected) * client_sum[key]) - ((1.0 / self.alpha) * self.h[key])
-        self.gloabl_model.load_state_dict(coord_dict)
-
-        return coord_dict
+        self.global_model.load_state_dict(coord_dict)
 
 
     def run(self):
@@ -79,15 +77,9 @@ class Coordinator (threading.Thread):
                 data = client_sockets[client].recv_pyobj()
                 loss += data[0]
                 vendor_weights.append(data[1])
-        
             
-            # Average and distribute weights
-            # self.compute_new_h(vendor_weights)
-            # new_weights = self.update_coord_model(vendor_weights)
-            # for client in selected_clients:
-            #     client_sockets[client].send_pyobj((1, new_weights))
-            # for client in selected_clients:
-            #     client_sockets[client].recv_string()
+            self.compute_new_h(vendor_weights)
+            self.update_coord_model(vendor_weights)
 
             # Receive test accuracy
             client_sockets[selected_clients[0]].send_pyobj((2, None))

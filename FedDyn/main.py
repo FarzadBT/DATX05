@@ -38,7 +38,7 @@ port = 10000
 # Parameters
 num_clients = 3
 num_selected = 2
-num_rounds = 10
+num_rounds = 1000
 epochs = 10
 alpha = 0.01
 
