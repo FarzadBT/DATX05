@@ -44,7 +44,7 @@ class Vendor (threading.Thread):
                 self.optimizer.step()
 
         model_dict = copy.deepcopy(self.model.state_dict())
-        # self.update_local_gradient()
+        self.update_local_gradient()
 
         return (loss.item(), model_dict)
 
