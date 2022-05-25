@@ -26,19 +26,36 @@ class Coordinator (threading.Thread):
         # Initial encryption
         for key in self.global_dict:
             self.global_dict[key] = ts.ckks_tensor(self.context, self.global_dict[key])
+        self.context.make_context_public()
 
     
-    def compute_new_h(self, vendor_weights):
+    def compute_new_h(self, h_weights):
+        """
         client_sum = copy.deepcopy(vendor_weights[0])
         prev_state_dict = self.global_dict
         for key in client_sum.keys():
             for i in range(1, len(vendor_weights)):
                 client_sum[key] += (vendor_weights[i][key] - prev_state_dict[key])
-
+        
         for key in self.h.keys():
-            self.h[key] -= (self.alpha / self.num_clients) * client_sum[key]
-            temp = self.h[key].decrypt()
-            self.h[key] = ts.ckks_tensor(self.context, temp)
+            #print("attempt 1")
+            temp_h = client_sum[key] * (self.alpha / self.num_clients)
+            #print("1 success")
+            #print("attempt 2")
+            self.h[key] -= temp_h
+            #print("2 success")
+            #self.h[key] -= (self.alpha / self.num_clients) * client_sum[key]
+            # Dirty hack to get around scaling error
+            # temp = self.h[key].decrypt()
+            # self.h[key] = ts.ckks_tensor(self.context, temp)
+        """
+        sum = copy.deepcopy(h_weights[0])
+        for key in sum.keys():
+            for i in range(1, len(h_weights)):
+                sum[key] += h_weights[i][key]
+        
+        for key in self.h.keys():
+            self.h[key] -= sum[key]
 
 
     def update_coord_model(self, vendor_weights):
@@ -75,11 +92,13 @@ class Coordinator (threading.Thread):
 
             loss = 0
             vendor_weights = []
+            h_weights = []
             # Receive encrypted weights
             for client in selected_clients:
                 enc_data = client_sockets[client].recv_pyobj()
                 loss += enc_data[0]
                 vendor_weights.append(enc_data[1])
+                h_weights.append(enc_data[2])
 
             # Deserialise the encrypted weights
             for vendor_weight in vendor_weights:
@@ -87,7 +106,12 @@ class Coordinator (threading.Thread):
                     temp = ts.ckks_tensor_from(self.context, vendor_weight[key])
                     vendor_weight[key] = temp
             
-            self.compute_new_h(vendor_weights)
+            for h_weight in h_weights:
+                for key in h_weight:
+                    temp = ts.ckks_tensor_from(self.context, h_weight[key])
+                    h_weight[key] = temp
+
+            self.compute_new_h(h_weights)
             self.update_coord_model(vendor_weights)
 
             # Receive test accuracy

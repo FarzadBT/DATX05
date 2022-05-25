@@ -1,4 +1,3 @@
-import queue
 import numpy as np
 import pandas as pd
 import tenseal as ts
@@ -74,7 +73,7 @@ client_ports = [(port + i) for i in range(num_clients)]
 
 coordinator = Coordinator(0, "Coordinator", num_clients, num_selected, num_rounds, pub_context, port, client_ports, alpha)
 
-vendors = [Vendor(i+1, f"Vendor-{i+1}", train_data_loaders[i], epochs, test_loader, context, client_ports[i], alpha) for i in range(num_clients)]
+vendors = [Vendor(i+1, f"Vendor-{i+1}", train_data_loaders[i], epochs, test_loader, context, client_ports[i], alpha, num_clients) for i in range(num_clients)]
 
 # Start processes
 for vendor in vendors: vendor.start()

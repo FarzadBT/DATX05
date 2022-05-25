@@ -11,7 +11,7 @@ from simpleModel import SimpleModel
 class Vendor (threading.Thread):
     
 
-    def __init__(self, threadID, name, dataloader, epochs, test_loader, context, port, alpha):
+    def __init__(self, threadID, name, dataloader, epochs, test_loader, context, port, alpha, num_clients):
         threading.Thread.__init__(self)
         self.threadID = threadID
         self.name = name
@@ -21,6 +21,7 @@ class Vendor (threading.Thread):
         self.context = context
         self.port = port
         self.alpha = alpha
+        self.num_clients = num_clients
         
         self.model = SimpleModel()
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.01)
@@ -50,7 +51,15 @@ class Vendor (threading.Thread):
             enc_model_weight = ts.ckks_tensor(self.context, enc_model_dict[key])
             enc_model_dict[key] = enc_model_weight.serialize()
 
-        return (loss.item(), enc_model_dict)
+        # Precompute part of h unencrypted
+        prev_global_model_dict = self.prev_global_model.state_dict()
+        h_dict = copy.deepcopy(self.model.state_dict())
+        for key in prev_global_model_dict:
+            h_dict[key] -= prev_global_model_dict[key] * (self.alpha / self.num_clients)
+            temp = ts.ckks_tensor(self.context, h_dict[key])
+            h_dict[key] = temp.serialize()
+
+        return (loss.item(), enc_model_dict, h_dict)
 
 
     def dynamic_regularization(self, loss):
@@ -114,8 +123,8 @@ class Vendor (threading.Thread):
                     enc_weight = ts.ckks_tensor_from(self.context, enc_serialised_weights[key])
                     temp[key] = torch.Tensor(enc_weight.decrypt().tolist())
                 self.prev_global_model.load_state_dict(temp)
-                train_loss, enc_weights = self.update_vendor()
-                coord_socket.send_pyobj((train_loss, enc_weights))
+                train_loss, enc_weights, enc_h = self.update_vendor()
+                coord_socket.send_pyobj((train_loss, enc_weights, enc_h))
 
             if flag == 1: # return test data
                 test_loss, test_acc = self.test()
